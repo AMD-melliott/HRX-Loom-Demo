@@ -1,0 +1,223 @@
+# HRX Loom — capability demo
+
+An internal-technical demo of **HRX Loom**: AMD's experimental compiler, runtime
+and serving stack where model support and optimization live *outside* the
+inference engine, and where ports are driven by a coding agent via
+[`loom-skills`](https://github.com/loom-fun/loom-skills).
+
+The demo has two halves:
+
+- a **browser demo** that runs anywhere, with no GPU, built on the real
+  published loom-fun benchmark catalog (51 models, 9 workloads, every number
+  linked to the CI run that produced it);
+- **runnable scripts** for a real Strix Halo box, so the same UI can show
+  measurements from your own hardware instead of published figures.
+
+---
+
+## Quick start
+
+### Rehearsal — no GPU, no network
+
+```bash
+pip install flask requests
+python3 app.py
+# open http://127.0.0.1:5000
+```
+
+The backend probes for a `loom-serve` on `127.0.0.1:8080`. With none running it
+starts in **replay** mode and labels every figure as published AMD data.
+
+There is also a zero-dependency build — a single HTML file, no Python at all:
+
+```bash
+python3 scripts/build_standalone.py
+# open dist/hrx-loom-demo.html in any browser
+```
+
+That build is permanently in replay mode and says so. Use it when the room has
+no network and you do not want to run a server.
+
+### Live — against a real Strix Halo box
+
+```bash
+cd strix-halo
+./01_install_loom.sh                                    # hrx-loom into ~/loom/.venv
+source ~/loom/.venv/bin/activate
+./02_fetch_and_serve.sh loom-fun/bartowski-Qwen2.5-0.5B-Instruct-loom
+# in another terminal:
+./03_measure.sh                                         # sanity check + small measurement
+
+# then point the demo at it
+LOOM_SERVE_URL=http://127.0.0.1:8080 python3 app.py
+```
+
+The provenance bar flips to **live** and the "measure on this box" panel
+unlocks. Published catalog numbers stay on screen but stay labelled published.
+
+---
+
+## What the four screens argue
+
+| # | Screen | The point |
+|---|---|---|
+| 01 | **The stack** | A port is a *model package*, not an engine patch. Shows the compile path (one source → ELF / HSACO / SPIR-V / Wasm / NPU) and the real `serve` descriptor for any of the 51 published ports. |
+| 02 | **The agent loop** | Port → Measure → Optimize → Report, with the real script names. The roofline step is what stops the agent burning a budget on an unreachable target, and the card generator refuses numbers without evidence. |
+| 03 | **Evidence** | The published benchmark data, wins *and* losses, each row linking to its GitHub Actions run. Live measurement panel when a server is attached. |
+| 04 | **What it unlocks** | The engine-maintainer bottleneck, the 13 validation gates across the catalog, and an explicit list of what this demo does not show. |
+
+---
+
+## Configuration
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `LOOM_SERVE_URL` | `http://127.0.0.1:8080` | where to look for a `loom-serve` |
+| `LOOM_MODEL` | first id the server lists | model to exercise in live mode |
+| `DEMO_MAX_WORKERS` | `8` | hard cap on concurrent probe requests |
+| `DEMO_PORT` | `5000` | port for the demo itself |
+
+---
+
+## Layout
+
+```
+app.py                        backend; live probe + replay fallback
+data/catalog.json             extracted published catalog (built, not hand-written)
+frontend/                     index.html, styles.css, app.js — no CDN, no build step
+scripts/build_catalog.py      loom-data.js -> catalog.json  (read its docstring)
+scripts/build_standalone.py   inline everything into one HTML file
+strix-halo/01_install_loom.sh install the SDK, with preflight checks
+strix-halo/02_fetch_and_serve.sh  fetch a package and serve it
+strix-halo/03_measure.sh      sanity check + small end-to-end measurement
+tests/fake_loom_serve.py      protocol-accurate stub — no real inference
+tests/test_demo.py            14 regression checks
+```
+
+Rebuild the catalog from a fresh upstream snapshot:
+
+```bash
+curl -o /tmp/loom-data.js https://loom-fun.github.io/loom-dev/assets/loom-data.js
+python3 scripts/build_catalog.py --input /tmp/loom-data.js --output data/catalog.json
+python3 tests/test_demo.py
+```
+
+---
+
+## Honesty notes
+
+**Read this before presenting any number from this demo.**
+
+### What is verified
+
+Confirmed against the HRX Loom quickstart, the loom-dev site and the
+`loom-skills` README:
+
+- `pip install 'hrx-loom[hf]'`; Python ≥ 3.12; Linux x86-64 glibc ≥ 2.39
+  (Ubuntu 24.04+) or Windows 11 Git Bash; developed on gfx1151.
+- `loom-fetch huggingface:<org>/<pkg>` — pulls the package and the upstream
+  GGUF from its original repo, checking sha256. The GGUF is not re-hosted.
+- `loom-serve --model=<dir-or-model.json> --device=amdgpu`, OpenAI-compatible
+  on **:8080**, emitting `{"event":"ready","address":"127.0.0.1:8080","models":1}`.
+- `POST /v1/chat/completions`, `GET /v1/models`.
+- Stage scripts `loom-port-llm/port.sh`, `qualify.sh`, `finalize.sh`; nine
+  skills; thirteen validation gates.
+- The benchmark catalog in `data/catalog.json` is a mechanical extraction of
+  the published `loom-data.js` (generated 2026-11-13). Nothing in it was
+  authored by hand.
+
+### What is NOT verified — check before relying on it
+
+- **`loom-serve`'s listen-address flag.** The server is documented as binding
+  `127.0.0.1:8080`; the flag to change that was not confirmed, so
+  `02_fetch_and_serve.sh` deliberately does **not** pass one. Guessing a
+  non-existent flag fails the launch outright. Run `loom-serve --help` first.
+- **`--memory_bytes` as a CLI flag.** `memory_bytes` is unambiguously a field in
+  each package's `serve` block — it is in the published catalog and the scripts
+  print it. Whether `loom-serve` accepts it as a *command-line override* is
+  unverified. Use `EXTRA_SERVE_ARGS` only after checking `--help`.
+- **The full `model.json` schema.** Hugging Face was unreachable from the build
+  environment (corporate proxy), so no real `model.json` was inspected. The
+  descriptor screen shows only the `serve` and `weights` fields carried in the
+  published catalog. Do not quote the rest of the schema from this demo.
+- **Version pinning.** loom-dev pins `hrx-loom[hf]==0.1.0`; the hrx-system
+  quickstart does not pin. `01_install_loom.sh` is unpinned by default; set
+  `LOOM_VERSION` if you need the pinned build.
+- **Nothing here has touched real AMD hardware.** The live path was verified
+  only against `tests/fake_loom_serve.py`. Budget time on the first real run
+  for flag and payload-shape mismatches.
+
+### Two traps worth knowing about
+
+**1. The benchmark data hides in `devlab`.** Each upstream model record carries
+metrics in two places: `performance.metrics` and `performance.devlab.metrics`.
+On the 2026-11-13 snapshot, **all 457 populated metric values come from
+`devlab`; zero come from the top level.** Twenty-eight of fifty-one models have
+*only* devlab metrics. A reader that uses `performance.metrics` renders an empty
+leaderboard while looking perfectly healthy. Where both are populated they agree
+exactly (0 differing fields), so `devlab` is a strict superset and the correct
+canonical read — and it is the only one carrying provenance (`date` and a
+GitHub Actions `source.url`). `scripts/build_catalog.py` reads devlab first and
+records which source each number came from.
+
+**2. Missing is not zero, and not parity.** A gap in the data renders as an
+em-dash everywhere, never as `0` and never as `1.0`. "We have no evidence" and
+"it matched llama.cpp" are different claims, and conflating them manufactures a
+result. `test_missing_speedup_is_none_not_parity` and
+`test_06_absent_usage_yields_none_not_zero` exist to keep that true — the latter
+catches a `loom-serve` that answers without a `usage` block, which would
+otherwise show as a confident `0 tok/s`.
+
+### How to read the live numbers
+
+Live measurements are **end-to-end and non-streamed**: an average output rate
+over the whole response. They are *not* time-to-first-token, *not* a
+steady-state decode rate, and *not* comparable to the catalog's prefill/decode
+split. Separating those needs token-level streaming timestamps, which this demo
+does not do. For a real comparison against llama.cpp ROCm, use the
+`loom-benchmark` skill, which takes a proper baseline and runs the gates.
+
+### Framing caveats
+
+- HRX Loom is labelled a **tech preview** by AMD. Nothing here is a product
+  commitment.
+- Attribution differs slightly between sources: Phoronix credits AMD engineers
+  Jeremy Fowers and Ben Vanik with a 50-model, 18-architecture experiment in
+  three to four days; the hrx-system docs describe "a community contributor"
+  porting fifty models over a weekend with a Claude subscription. Both are
+  cited; pick the framing your audience needs and attribute it.
+- Comparisons use the llama.cpp **ROCm** backend at the build recorded per
+  model. The Vulkan backend is a different, generally slower reference —
+  Phoronix quotes 1.9× against it versus 1.5–2.1× against ROCm at 32K.
+- The catalog's own ranking is a geometric mean across decode, prefill and
+  4-stream workloads. This demo reproduces that method over the nine published
+  workloads; expect small ordering differences from the loom-dev leaderboard.
+
+### Known gap
+
+There is still no AMD **web** design-system skill (only `amd-pptx-template`,
+which is PowerPoint-only), so `frontend/styles.css` is a one-off approximation
+of the AMD look, leaning on the loom-dev site's typographic feel. Swap in real
+tokens if such a skill lands.
+
+---
+
+## Tests
+
+```bash
+python3 tests/test_demo.py
+```
+
+14 checks: catalog extraction (devlab preference, no fabricated parity,
+regressions retained, provenance URLs present) and server behaviour (replay
+when nothing is listening, replay responses carrying no metric fields at all,
+live detection, worker cap enforcement, absent-usage handling, failure
+counting). All pass against the stub.
+
+## Sources
+
+- [loom-dev](https://loom-fun.github.io/loom-dev/) — leaderboard and catalog
+- [loom-fun/loom-skills](https://github.com/loom-fun/loom-skills) — the agent skills
+- [ROCm/hrx-system](https://github.com/ROCm/hrx-system) — compiler and server
+- [HRX Loom docs](https://rocm.github.io/hrx-system/loom/)
+- [Phoronix coverage](https://www.phoronix.com/news/AMD-HRX-Loom-Experiment)

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HRX Loom — capability demo</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="provenanceBar" class="prov-bar">
+  <span class="prov-mode" id="provMode">checking…</span>
+  <span class="prov-text" id="provText">Determining whether a loom-serve is reachable…</span>
+  <span class="prov-spacer"></span>
+  <span class="prov-note">Illustrative interface built for this demo — not an AMD product screen.</span>
+</div>
+
+<header class="masthead">
+  <div class="brand">
+    <div class="brand-mark">◤◢</div>
+    <div>
+      <h1>HRX Loom</h1>
+      <p>Model optimization outside the inference engine — on Strix Halo</p>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-screen="stack"><b>01</b> The stack</button>
+    <button class="tab" data-screen="loop"><b>02</b> The agent loop</button>
+    <button class="tab" data-screen="evidence"><b>03</b> Evidence</button>
+    <button class="tab" data-screen="unlock"><b>04</b> What it unlocks</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ================= 01 THE STACK ================= -->
+<section class="screen is-active" id="screen-stack">
+  <div class="screen-head">
+    <h2>A model package, not an engine patch.</h2>
+    <p>Historically, supporting a new architecture meant changing the inference engine
+       and waiting on its maintainers. Loom moves the model's structure, tensor layouts
+       and numerical implementations into a <em>package</em> that the server loads.
+       The thing a porter edits is the package — never the runtime.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head"><span>compile path</span><span class="faint">one source, many targets</span></div>
+      <div class="pipeline">
+        <div class="pipe-col">
+          <div class="pipe-box">C++ subset<small>Loom authoring API</small></div>
+          <div class="pipe-swap">↕ import / export</div>
+          <div class="pipe-box">Loom IR<small>.loom text · .loombc bytecode</small></div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-col">
+          <div class="pipe-box accent">Loom compiler<small>link · specialize · optimize</small></div>
+          <div class="pipe-sub">programs · commands · kernels</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-col targets">
+          <div class="tgt"><b>x86 CPU</b><span>ELF</span></div>
+          <div class="tgt"><b>AMD GPU</b><span>HSACO</span></div>
+          <div class="tgt"><b>XDNA NPU</b><span>tile / array</span></div>
+          <div class="tgt"><b>Vulkan</b><span>SPIR-V</span></div>
+          <div class="tgt"><b>Wasm</b><span>modules</span></div>
+        </div>
+      </div>
+      <p class="pipe-note">The same Qwen27B source runs through two of these paths unchanged —
+        native AMD GPU instructions, or SPIR-V handed to a Vulkan driver.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span>serve descriptor</span><span class="faint" id="descModelName">—</span></div>
+      <p class="panel-lede">The fields below are the real <code>serve</code> block published for this
+         model in the loom-fun catalog. They are what you actually tune per box.</p>
+      <table class="kv" id="descTable"></table>
+      <div class="desc-pick">
+        <label>inspect another model package
+          <select id="descSelect"></select>
+        </label>
+      </div>
+      <p class="caveat">Shown: the <code>serve</code>/<code>weights</code> fields carried in the
+        published catalog. The full <code>model.json</code> has more keys that this demo has
+        <b>not</b> verified — see the honesty notes in the README before quoting its schema.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><span>three commands</span><span class="faint">verified against the HRX Loom quickstart</span></div>
+    <div class="cmds">
+      <div class="cmd">
+        <div class="cmd-n">install</div>
+        <pre><code><span class="p">$</span> pip install 'hrx-loom[hf]'</code></pre>
+        <p>Compiler, runtime and <code>loom-serve</code>. The whole SDK is about 8 MB compressed.</p>
+      </div>
+      <div class="cmd">
+        <div class="cmd-n">fetch</div>
+        <pre><code><span class="p">$</span> loom-fetch huggingface:loom-fun/<span class="s">&lt;pkg&gt;</span></code></pre>
+        <p>Pulls the package and the upstream GGUF from its original repo, verifying sha256.
+           The GGUF is never re-hosted.</p>
+      </div>
+      <div class="cmd">
+        <div class="cmd-n">serve</div>
+        <pre><code><span class="p">$</span> loom-serve --model=<span class="s">&lt;dir&gt;</span> --device=amdgpu</code></pre>
+        <p>OpenAI-compatible on <code>:8080</code>.
+           Emits <code>{"event":"ready","address":"127.0.0.1:8080","models":1}</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 THE AGENT LOOP ================= -->
+<section class="screen" id="screen-loop">
+  <div class="screen-head">
+    <h2>The port is driven by an agent, and it has to show its work.</h2>
+    <p><code>loom-skills</code> gives a coding agent nine skills and a four-stage loop. The
+       interesting part for us is not that an agent writes kernels — it is that the loop
+       refuses to report a number that has no evidence behind it.</p>
+  </div>
+
+  <div class="stages">
+    <div class="stage">
+      <div class="stage-n">1</div>
+      <h3>Port</h3>
+      <p class="stage-script">loom-port-llm/port.sh</p>
+      <p>Reuses existing work, builds the model package, tests basic behaviour.</p>
+      <div class="stage-out">→ a model served locally</div>
+    </div>
+    <div class="stage">
+      <div class="stage-n">2</div>
+      <h3>Measure</h3>
+      <p class="stage-script">qualify.sh</p>
+      <p>Runs the validation gates, takes a llama.cpp ROCm baseline, computes a roofline
+         to decide what is even reachable.</p>
+      <div class="stage-out">→ a baseline and a realistic target</div>
+    </div>
+    <div class="stage">
+      <div class="stage-n">3</div>
+      <h3>Optimize</h3>
+      <p class="stage-script">within the roofline budget</p>
+      <p>Tries changes, measures each, re-checks correctness. Defaults to a 30-minute
+         budget; you can set your own target instead.</p>
+      <div class="stage-out">→ the best <em>verified</em> build found</div>
+    </div>
+    <div class="stage">
+      <div class="stage-n">4</div>
+      <h3>Report</h3>
+      <p class="stage-script">finalize.sh</p>
+      <p>Full gates, audit, and a report. The model card is generated from the run's own
+         logs — a value with no evidence renders as <b>not measured</b>.</p>
+      <div class="stage-out">→ a package others can re-run</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head"><span>the roofline step is the honest one</span></div>
+      <p class="panel-lede">Before optimizing, the agent estimates the performance limit and tells
+        you if your target is out of reach. That is what stops the loop from burning a
+        3-hour budget chasing a number the memory system cannot deliver.</p>
+      <div class="quote">
+        <code>&gt; /loom Port, validate and optimize &lt;hf-gguf&gt;.</code>
+        <code>&gt; /loom … until decode is 50% faster than llama.cpp.</code>
+        <code>&gt; /loom … for 3 hours.</code>
+      </div>
+      <p class="caveat">The agent runs unattended except to accept a gated model's licence.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span>nine skills</span><span class="faint">loom-fun/loom-skills</span></div>
+      <ul class="skills" id="skillList"></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 EVIDENCE ================= -->
+<section class="screen" id="screen-evidence">
+  <div class="screen-head">
+    <h2>51 ports, nine workloads, every number traceable to a CI run.</h2>
+    <p id="evidenceLede">Published results from the loom-fun catalog, measured on Strix Halo
+       against llama.cpp ROCm. Speedups above 1.0 favour Loom; below 1.0 llama.cpp is still
+       faster. Both directions are shown — the regressions are the point of a credible port.</p>
+  </div>
+
+  <div class="stat-row" id="statRow"></div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <span>speedup by workload · log scale, centred on parity</span>
+      <span class="faint">tick = median · hollow = llama.cpp faster</span>
+    </div>
+    <div id="stripChart" class="chart"></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head"><span>leaderboard</span><span class="faint">geometric mean across 9 workloads</span></div>
+      <div class="board-wrap"><table class="board" id="board"></table></div>
+    </div>
+
+    <div class="panel live-panel">
+      <div class="panel-head"><span>measure on this box</span><span id="liveBadge" class="badge">replay</span></div>
+      <p class="panel-lede" id="livePanelLede">
+        No <code>loom-serve</code> is answering, so there is nothing to measure here.
+        Everything above is published AMD data, not a local reading.
+      </p>
+      <div class="live-controls">
+        <label>concurrency <input type="number" id="pConc" value="4" min="1" max="8"></label>
+        <label>prompt ≈tok <input type="number" id="pPrompt" value="200" min="10" max="8000" step="10"></label>
+        <label>max out <input type="number" id="pMax" value="128" min="16" max="2048" step="16"></label>
+        <button id="probeBtn" class="btn" disabled>run measurement</button>
+      </div>
+      <div id="liveResult" class="live-result"></div>
+      <p class="caveat">Live figures are end-to-end and non-streamed: an average output rate over
+        the whole response, <b>not</b> a time-to-first-token or steady-state decode rate. They are
+        not directly comparable to the catalog's prefill/decode split above.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 WHAT IT UNLOCKS ================= -->
+<section class="screen" id="screen-unlock">
+  <div class="screen-head">
+    <h2>The bottleneck that moved.</h2>
+    <p>Fifty models across eighteen architectures, in three to four days. The number worth
+       arguing about internally is not the speedup — it is the elapsed time, and what it
+       implies about who is allowed to add a model.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head"><span>before</span></div>
+      <ul class="cmp cmp-before">
+        <li>New architecture → patch the inference engine</li>
+        <li>Change lands in the engine's release cycle</li>
+        <li>A small group of maintainers is the throughput limit</li>
+        <li>Niche and new models wait, or never arrive</li>
+        <li>Optimization is coupled to the server you run</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span>with Loom</span></div>
+      <ul class="cmp cmp-after">
+        <li>New architecture → author a model package</li>
+        <li>Load, edit or swap it without restarting the server</li>
+        <li>Anyone with the SDK and a GPU can port and publish</li>
+        <li>A port is shareable source, not a vendor patch</li>
+        <li>A better decoder or quantization carries to the next port</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><span>validation gates across the catalog</span><span class="faint" id="gateMeta"></span></div>
+    <p class="panel-lede">A port is only as good as what it is checked against. Each package is
+      graded on up to thirteen gates, most comparing generated tokens directly with llama.cpp.</p>
+    <div class="gate-grid" id="gateGrid"></div>
+    <div id="gateTally" class="gate-tally"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><span>what this demo does not show</span></div>
+    <ul class="gaps">
+      <li><b>No local measurement unless you connect one.</b> In replay mode every figure is
+        published loom-fun data from 2026-11-13, not a reading from the machine in front of you.</li>
+      <li><b>No power, thermal or memory-pressure data.</b> The catalog does not publish it, and
+        on a 128 GB Strix Halo part that is a real question this demo cannot answer.</li>
+      <li><b>No cold-start or compile-time figures.</b> "Kernels compile in microseconds to
+        milliseconds" is the project's claim, not something measured here.</li>
+      <li><b>One llama.cpp baseline.</b> Comparisons use the ROCm backend at the build recorded
+        per model; the Vulkan backend is a different and generally slower reference.</li>
+      <li><b>Tech preview.</b> HRX Loom is labelled a tech preview by AMD. Nothing here should be
+        read as a product commitment.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <span>Sources:
+    <a href="https://loom-fun.github.io/loom-dev/" target="_blank" rel="noopener">loom-dev</a> ·
+    <a href="https://github.com/loom-fun/loom-skills" target="_blank" rel="noopener">loom-skills</a> ·
+    <a href="https://github.com/ROCm/hrx-system" target="_blank" rel="noopener">ROCm/hrx-system</a>
+  </span>
+  <span id="footMeta"></span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
