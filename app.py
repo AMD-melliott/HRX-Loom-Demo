@@ -23,6 +23,7 @@ Env vars:
   LOOM_MODEL       model id to exercise; default = first id the server lists
   DEMO_MAX_WORKERS default 8    hard cap on concurrent probe requests
   DEMO_PORT        default 5000
+  DEMO_HOST        default 127.0.0.1 (set 0.0.0.0 only on a trusted network)
 """
 
 import json
@@ -44,6 +45,8 @@ LOOM_SERVE_URL = os.environ.get("LOOM_SERVE_URL", "http://127.0.0.1:8080").rstri
 LOOM_MODEL = os.environ.get("LOOM_MODEL") or None
 MAX_WORKERS = int(os.environ.get("DEMO_MAX_WORKERS", "8"))
 DEMO_PORT = int(os.environ.get("DEMO_PORT", "5000"))
+# Loopback by default: /api/probe drives real GPU load and has no auth.
+DEMO_HOST = os.environ.get("DEMO_HOST", "127.0.0.1")
 
 # Separate connect and read timeouts: a stalled server must free the worker
 # rather than pin it for the whole read budget.
@@ -239,10 +242,17 @@ def api_probe():
 
     try:
         body = request.get_json(silent=True) or {}
+        try:
+            concurrency = int(body.get("concurrency", 4))
+            prompt_tokens = max(1, min(int(body.get("prompt_tokens", 200)), 32768))
+            max_tokens = max(1, min(int(body.get("max_tokens", 128)), 4096))
+        except (TypeError, ValueError):
+            return jsonify({"error": "concurrency, prompt_tokens and max_tokens "
+                                     "must be integers"}), 400
         result = run_probe(
-            concurrency=int(body.get("concurrency", 4)),
-            prompt_tokens_approx=int(body.get("prompt_tokens", 200)),
-            max_tokens=int(body.get("max_tokens", 128)),
+            concurrency=concurrency,
+            prompt_tokens_approx=prompt_tokens,
+            max_tokens=max_tokens,
         )
         with _lock:
             _state["probe"] = result
@@ -286,6 +296,8 @@ if __name__ == "__main__":
     else:
         print(f"  mode         : REPLAY - no server ({info.get('reason')})")
         print("                 All figures shown are PUBLISHED, not measured here.")
-    print(f"  open         : http://127.0.0.1:{DEMO_PORT}")
+    print(f"  open         : http://{'127.0.0.1' if DEMO_HOST in ('0.0.0.0', '::') else DEMO_HOST}:{DEMO_PORT}")
+    if DEMO_HOST not in ("127.0.0.1", "localhost", "::1"):
+        print(f"  WARNING      : listening on {DEMO_HOST}; /api/probe is reachable from the network")
     print("=" * 68)
-    app.run(host="0.0.0.0", port=DEMO_PORT, debug=False)
+    app.run(host=DEMO_HOST, port=DEMO_PORT, debug=False)
