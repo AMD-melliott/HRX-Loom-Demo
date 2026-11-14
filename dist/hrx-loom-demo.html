@@ -382,23 +382,23 @@ footer{
   </div>
 
   <div class="panel">
-    <div class="panel-head"><span>three commands</span><span class="faint">verified against the HRX Loom quickstart</span></div>
+    <div class="panel-head"><span>three commands</span><span class="faint">verified with hrx-loom 0.1.0 on Strix Halo</span></div>
     <div class="cmds">
       <div class="cmd">
         <div class="cmd-n">install</div>
-        <pre><code><span class="p">$</span> pip install 'hrx-loom[hf]'</code></pre>
-        <p>Compiler, runtime and <code>loom-serve</code>. The whole SDK is about 8 MB compressed.</p>
+        <pre><code><span class="p">$</span> pip install 'hrx-loom[hf]==0.1.0'</code></pre>
+        <p>Compiler, runtime and <code>loom-serve</code>. The 0.1.0 wheel is about 22 MB.</p>
       </div>
       <div class="cmd">
         <div class="cmd-n">fetch</div>
-        <pre><code><span class="p">$</span> loom-fetch huggingface:loom-fun/<span class="s">&lt;pkg&gt;</span></code></pre>
+        <pre><code><span class="p">$</span> loom-fetch --output=<span class="s">&lt;dir&gt;</span> https://huggingface.co/loom-fun/<span class="s">&lt;pkg&gt;</span>/resolve/main/model.json</code></pre>
         <p>Pulls the package and the upstream GGUF from its original repo, verifying sha256.
            The GGUF is never re-hosted.</p>
       </div>
       <div class="cmd">
         <div class="cmd-n">serve</div>
-        <pre><code><span class="p">$</span> loom-serve --model=<span class="s">&lt;dir&gt;</span> --device=amdgpu</code></pre>
-        <p>OpenAI-compatible on <code>:8080</code>.
+        <pre><code><span class="p">$</span> loom-serve --model=<span class="s">&lt;dir&gt;</span>/model.json --device=amdgpu</code></pre>
+        <p>OpenAI-style chat API on <code>127.0.0.1:8080</code> (change with <code>--listen</code>).
            Emits <code>{"event":"ready","address":"127.0.0.1:8080","models":1}</code>.</p>
       </div>
     </div>
@@ -563,7 +563,8 @@ footer{
       <li><b>No cold-start or compile-time figures.</b> "Kernels compile in microseconds to
         milliseconds" is the project's claim, not something measured here.</li>
       <li><b>One llama.cpp baseline.</b> Comparisons use the ROCm backend at the build recorded
-        per model; the Vulkan backend is a different and generally slower reference.</li>
+        per model. The published catalog carries no Vulkan numbers; on the model cards, Vulkan is
+        usually the faster llama.cpp backend for decode and the slower one for prefill.</li>
       <li><b>Tech preview.</b> HRX Loom is labelled a tech preview by AMD. Nothing here should be
         read as a product commitment.</li>
     </ul>
