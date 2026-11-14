@@ -33,11 +33,18 @@ EOF
   exit 1
 fi
 
-MODEL=$(curl -fsS "$LOOM_SERVE_URL/v1/models" \
-  | python3 -I -c 'import json,sys; d=json.load(sys.stdin); print((d.get("data") or [{}])[0].get("id",""))')
+# loom-serve answers /v1/models with an empty list for a moment while the
+# model registers, so wait briefly for an id instead of failing on the first try.
+MODEL=""
+for _ in $(seq 1 30); do
+  MODEL=$(curl -fsS "$LOOM_SERVE_URL/v1/models" \
+    | python3 -I -c 'import json,sys; d=json.load(sys.stdin); print((d.get("data") or [{}])[0].get("id",""))' || true)
+  [ -n "$MODEL" ] && break
+  sleep 1
+done
 
 if [ -z "$MODEL" ]; then
-  echo "!! server is up but lists no models" >&2
+  echo "!! server is up but listed no models after 30 s" >&2
   exit 1
 fi
 
