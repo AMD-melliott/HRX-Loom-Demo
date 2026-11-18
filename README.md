@@ -42,7 +42,7 @@ no network and you do not want to run a server.
 
 ```bash
 cd strix-halo
-./01_install_loom.sh                                    # hrx-loom into ~/loom/.venv
+./01_install_loom.sh                                    # hrx-loom==0.1.0 into ~/loom/.venv
 source ~/loom/.venv/bin/activate
 ./02_fetch_and_serve.sh loom-fun/bartowski-Qwen2.5-0.5B-Instruct-loom
 # in another terminal:
@@ -76,6 +76,7 @@ unlocks. Published catalog numbers stay on screen but stay labelled published.
 | `LOOM_MODEL` | first id the server lists | model to exercise in live mode |
 | `DEMO_MAX_WORKERS` | `8` | hard cap on concurrent probe requests |
 | `DEMO_PORT` | `5000` | port for the demo itself |
+| `DEMO_HOST` | `127.0.0.1` | interface the demo listens on; `0.0.0.0` exposes the probe button (real GPU load) to the network |
 
 ---
 
@@ -91,7 +92,7 @@ strix-halo/01_install_loom.sh install the SDK, with preflight checks
 strix-halo/02_fetch_and_serve.sh  fetch a package and serve it
 strix-halo/03_measure.sh      sanity check + small end-to-end measurement
 tests/fake_loom_serve.py      protocol-accurate stub — no real inference
-tests/test_demo.py            14 regression checks
+tests/test_demo.py            15 regression checks
 ```
 
 Rebuild the catalog from a fresh upstream snapshot:
@@ -115,10 +116,19 @@ Confirmed against the HRX Loom quickstart, the loom-dev site and the
 
 - `pip install 'hrx-loom[hf]'`; Python ≥ 3.12; Linux x86-64 glibc ≥ 2.39
   (Ubuntu 24.04+) or Windows 11 Git Bash; developed on gfx1151.
-- `loom-fetch huggingface:<org>/<pkg>` — pulls the package and the upstream
-  GGUF from its original repo, checking sha256. The GGUF is not re-hosted.
-- `loom-serve --model=<dir-or-model.json> --device=amdgpu`, OpenAI-compatible
-  on **:8080**, emitting `{"event":"ready","address":"127.0.0.1:8080","models":1}`.
+- `loom-fetch --output=<dir> https://huggingface.co/<org>/<pkg>/resolve/main/model.json`
+  — pulls the package and the upstream GGUF from its original repo, checking
+  sha256. The GGUF is not re-hosted. On hrx-loom 0.1.0 `--output` is required,
+  and the card must be a local `model.json` or an HTTP(S) URL; the
+  `huggingface:<org>/<pkg>` form is rejected.
+- `loom-serve --model=<dir>/model.json --device=amdgpu`, an OpenAI-style chat
+  API on **127.0.0.1:8080** by default, emitting
+  `{"event":"ready","address":"127.0.0.1:8080","models":1}`.
+- `--listen=127.0.0.1:<port>` changes the address (repeatable).
+- `--memory_bytes=<n>` is an optional elastic cap; the default is no limit.
+- Not every OpenAI field is accepted: 0.1.0 returns HTTP 400 for `stop` and
+  `user`, among others. The demo only sends `model`, `messages`, `max_tokens`
+  and `temperature`.
 - `POST /v1/chat/completions`, `GET /v1/models`.
 - Stage scripts `loom-port-llm/port.sh`, `qualify.sh`, `finalize.sh`; nine
   skills; thirteen validation gates.
@@ -128,24 +138,22 @@ Confirmed against the HRX Loom quickstart, the loom-dev site and the
 
 ### What is NOT verified — check before relying on it
 
-- **`loom-serve`'s listen-address flag.** The server is documented as binding
-  `127.0.0.1:8080`; the flag to change that was not confirmed, so
-  `02_fetch_and_serve.sh` deliberately does **not** pass one. Guessing a
-  non-existent flag fails the launch outright. Run `loom-serve --help` first.
-- **`--memory_bytes` as a CLI flag.** `memory_bytes` is unambiguously a field in
-  each package's `serve` block — it is in the published catalog and the scripts
-  print it. Whether `loom-serve` accepts it as a *command-line override* is
-  unverified. Use `EXTRA_SERVE_ARGS` only after checking `--help`.
-- **The full `model.json` schema.** Hugging Face was unreachable from the build
-  environment (corporate proxy), so no real `model.json` was inspected. The
-  descriptor screen shows only the `serve` and `weights` fields carried in the
-  published catalog. Do not quote the rest of the schema from this demo.
-- **Version pinning.** loom-dev pins `hrx-loom[hf]==0.1.0`; the hrx-system
-  quickstart does not pin. `01_install_loom.sh` is unpinned by default; set
-  `LOOM_VERSION` if you need the pinned build.
-- **Nothing here has touched real AMD hardware.** The live path was verified
-  only against `tests/fake_loom_serve.py`. Budget time on the first real run
-  for flag and payload-shape mismatches.
+- **The full `model.json` schema.** A real 0.1.0 package's top-level keys are
+  `schema_version`, `model`, `origins`, `programs`, `services`, `variants` and
+  `presets`. There is **no** `serve` block in the package: the `serve` values
+  on the descriptor screen (device, `memory_bytes`, context) come from the
+  loom-dev catalog and the cards' quick starts. Do not quote the rest of the
+  schema from this demo.
+- **Version pinning.** loom-dev and the cards pin `hrx-loom[hf]==0.1.0`, and
+  `01_install_loom.sh` now does the same by default. Newer `hrx-system` builds
+  cannot serve 0.1.0 packages, so keep the pin until the cards move.
+
+### Tested on real hardware
+
+On 2026-11-13 the scripts and live mode were run on a Strix Halo
+(Ryzen AI Max+ PRO 395, Radeon 8060S, 128 GB) with hrx-loom 0.1.0 and
+`loom-fun/bartowski-Qwen2.5-0.5B-Instruct-loom`: install, fetch, serve,
+`03_measure.sh`, and `/api/probe` at concurrency 1, 4 and 8 with no failures.
 
 ### Two traps worth knowing about
 
@@ -187,8 +195,11 @@ does not do. For a real comparison against llama.cpp ROCm, use the
   porting fifty models over a weekend with a Claude subscription. Both are
   cited; pick the framing your audience needs and attribute it.
 - Comparisons use the llama.cpp **ROCm** backend at the build recorded per
-  model. The Vulkan backend is a different, generally slower reference —
-  Phoronix quotes 1.9× against it versus 1.5–2.1× against ROCm at 32K.
+  model, because that is all `loom-data.js` carries. The model cards also
+  publish a same-runner llama.cpp **Vulkan** column. Vulkan is not uniformly
+  slower: across the cards it is usually the faster llama.cpp backend for
+  decode and the slower one for prefill. A ROCm-only decode speedup can
+  therefore overstate Loom's lead over the best llama.cpp configuration.
 - The catalog's own ranking is a geometric mean across decode, prefill and
   4-stream workloads. This demo reproduces that method over the nine published
   workloads; expect small ordering differences from the loom-dev leaderboard.
@@ -208,7 +219,7 @@ tokens if such a skill lands.
 python3 tests/test_demo.py
 ```
 
-14 checks: catalog extraction (devlab preference, no fabricated parity,
+15 checks: catalog extraction (devlab preference, no fabricated parity,
 regressions retained, provenance URLs present) and server behaviour (replay
 when nothing is listening, replay responses carrying no metric fields at all,
 live detection, worker cap enforcement, absent-usage handling, failure

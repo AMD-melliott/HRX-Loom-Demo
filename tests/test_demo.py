@@ -238,6 +238,13 @@ class TestServerModes(unittest.TestCase):
         self.assertIsNone(d["latency_p50"], "no successes, so no latency to report")
         self._stop_stub()
 
+    def test_08_bad_probe_input_is_a_400(self):
+        """Malformed input is the caller's error, not a server crash."""
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            http_json(f"http://127.0.0.1:{DEMO_PORT}/api/probe",
+                      {"concurrency": "lots"})
+        self.assertEqual(cm.exception.code, 400)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
