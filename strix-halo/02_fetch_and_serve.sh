@@ -19,12 +19,19 @@
 #   ./02_fetch_and_serve.sh loom-fun/bartowski-Qwen2.5-0.5B-Instruct-loom
 #   LISTEN=127.0.0.1:8091 MEMORY_BYTES=5000000000 ./02_fetch_and_serve.sh <pkg>
 #   REVISION=<commit> ./02_fetch_and_serve.sh <pkg>     # pin the card revision
+#   PRESET=chat-16gb ./02_fetch_and_serve.sh <pkg>       # pick another card preset
 #   EXTRA_SERVE_ARGS="--foo=bar" ./02_fetch_and_serve.sh <pkg>
+#
+# Cards declare several presets (0.2.0 cards on main: chat, chat-r9700,
+# chat-16gb; the v0.1.0 tag: chat, chat-r9700), and loom-fetch --no-input
+# refuses to guess: "preset: select explicitly (N choices)". `chat` is the
+# Strix Halo preset. For hrx-loom 0.1.0 use REVISION=v0.1.0.
 
 set -euo pipefail
 
 PKG="${1:-loom-fun/bartowski-Qwen2.5-0.5B-Instruct-loom}"
 REVISION="${REVISION:-main}"
+PRESET="${PRESET:-chat}"
 WORKDIR="${WORKDIR:-$PWD/loom-models}"
 DEVICE="${DEVICE:-amdgpu}"
 LISTEN="${LISTEN:-}"
@@ -43,13 +50,20 @@ CARD_URL="https://huggingface.co/$PKG/resolve/$REVISION/model.json"
 OUT_DIR="$WORKDIR/${PKG##*/}"
 mkdir -p "$WORKDIR"
 
-echo "==> loom-fetch $CARD_URL"
+echo "==> loom-fetch --preset=$PRESET $CARD_URL"
 echo "    into $OUT_DIR"
 echo "    (pulls the package plus the upstream GGUF from its original repo,"
 echo "     verifying sha256 - the GGUF is not re-hosted by loom-fun)"
 echo
 
-loom-fetch --no-input --output="$OUT_DIR" "$CARD_URL"
+if ! loom-fetch --no-input --preset="$PRESET" --output="$OUT_DIR" "$CARD_URL"; then
+  if [ -f "$OUT_DIR/model.json" ]; then
+    echo "!! $OUT_DIR already holds a package, possibly from another hrx-loom" >&2
+    echo "   version (0.1.0 and 0.2.0 packages are not interchangeable)." >&2
+    echo "   Remove it, or set WORKDIR to a fresh directory, and re-run." >&2
+  fi
+  exit 1
+fi
 
 MODEL_JSON="$OUT_DIR/model.json"
 if [ ! -f "$MODEL_JSON" ]; then

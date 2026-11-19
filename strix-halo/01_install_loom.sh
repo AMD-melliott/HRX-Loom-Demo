@@ -8,17 +8,18 @@
 #   - loom-skills itself installs into ~/loom/.venv; this script does the same
 #     by default so the two agree
 #
-# Pinned to 0.1.0 by default, matching the loom-dev site and the model cards.
-# Newer hrx-system builds cannot serve 0.1.0 packages, so only change this
-# together with the cards. LOOM_VERSION="" installs the latest release.
+# Pinned to 0.2.0 by default, matching the loom-fun cards on Hugging Face
+# `main` (promoted to 0.2.0 on 2026-11-17). 0.2.0 cannot serve 0.1.0 packages
+# and 0.1.0 cannot serve 0.2.0 ones, so keep this in step with the card
+# revision 02 fetches. LOOM_VERSION="" installs the latest release.
 #
 #   ./01_install_loom.sh
-#   LOOM_VERSION=0.1.0 LOOM_HOME=~/loom ./01_install_loom.sh
+#   LOOM_VERSION=0.2.0 LOOM_HOME=~/loom ./01_install_loom.sh
 
 set -euo pipefail
 
 LOOM_HOME="${LOOM_HOME:-$HOME/loom}"
-LOOM_VERSION="${LOOM_VERSION-0.1.0}"
+LOOM_VERSION="${LOOM_VERSION-0.2.0}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 echo "==> HRX Loom install"
