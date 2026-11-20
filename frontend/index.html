@@ -87,16 +87,16 @@
   </div>
 
   <div class="panel">
-    <div class="panel-head"><span>three commands</span><span class="faint">verified with hrx-loom 0.1.0 on Strix Halo</span></div>
+    <div class="panel-head"><span>three commands</span><span class="faint">verified with hrx-loom 0.2.0 on Strix Halo</span></div>
     <div class="cmds">
       <div class="cmd">
         <div class="cmd-n">install</div>
-        <pre><code><span class="p">$</span> pip install 'hrx-loom[hf]==0.1.0'</code></pre>
-        <p>Compiler, runtime and <code>loom-serve</code>. The 0.1.0 wheel is about 22 MB.</p>
+        <pre><code><span class="p">$</span> pip install 'hrx-loom[hf]==0.2.0'</code></pre>
+        <p>Compiler, runtime and <code>loom-serve</code>. The 0.2.0 wheel is about 20 MB.</p>
       </div>
       <div class="cmd">
         <div class="cmd-n">fetch</div>
-        <pre><code><span class="p">$</span> loom-fetch --output=<span class="s">&lt;dir&gt;</span> https://huggingface.co/loom-fun/<span class="s">&lt;pkg&gt;</span>/resolve/main/model.json</code></pre>
+        <pre><code><span class="p">$</span> loom-fetch --preset=chat --output=<span class="s">&lt;dir&gt;</span> https://huggingface.co/loom-fun/<span class="s">&lt;pkg&gt;</span>/resolve/main/model.json</code></pre>
         <p>Pulls the package and the upstream GGUF from its original repo, verifying sha256.
            The GGUF is never re-hosted.</p>
       </div>

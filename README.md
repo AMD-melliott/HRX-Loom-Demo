@@ -42,7 +42,7 @@ no network and you do not want to run a server.
 
 ```bash
 cd strix-halo
-./01_install_loom.sh                                    # hrx-loom==0.1.0 into ~/loom/.venv
+./01_install_loom.sh                                    # hrx-loom==0.2.0 into ~/loom/.venv
 source ~/loom/.venv/bin/activate
 ./02_fetch_and_serve.sh loom-fun/bartowski-Qwen2.5-0.5B-Instruct-loom
 # in another terminal:
@@ -116,18 +116,20 @@ Confirmed against the HRX Loom quickstart, the loom-dev site and the
 
 - `pip install 'hrx-loom[hf]'`; Python ≥ 3.12; Linux x86-64 glibc ≥ 2.39
   (Ubuntu 24.04+) or Windows 11 Git Bash; developed on gfx1151.
-- `loom-fetch --output=<dir> https://huggingface.co/<org>/<pkg>/resolve/main/model.json`
+- `loom-fetch --preset=chat --output=<dir> https://huggingface.co/<org>/<pkg>/resolve/main/model.json`
   — pulls the package and the upstream GGUF from its original repo, checking
-  sha256. The GGUF is not re-hosted. On hrx-loom 0.1.0 `--output` is required,
-  and the card must be a local `model.json` or an HTTP(S) URL; the
-  `huggingface:<org>/<pkg>` form is rejected.
+  sha256. The GGUF is not re-hosted. Cards declare several presets (`chat` is
+  the Strix Halo one), and without `--preset` a non-interactive fetch stops
+  with `preset: select explicitly (N choices)`. hrx-loom 0.2.0 also accepts
+  `huggingface:<org>/<pkg>:chat`; 0.1.0 needs `--output` and an HTTP(S) URL.
 - `loom-serve --model=<dir>/model.json --device=amdgpu`, an OpenAI-style chat
   API on **127.0.0.1:8080** by default, emitting
   `{"event":"ready","address":"127.0.0.1:8080","models":1}`.
 - `--listen=127.0.0.1:<port>` changes the address (repeatable).
 - `--memory_bytes=<n>` is an optional elastic cap; the default is no limit.
-- Not every OpenAI field is accepted: 0.1.0 returns HTTP 400 for `stop` and
-  `user`, among others. The demo only sends `model`, `messages`, `max_tokens`
+- Not every OpenAI field is honored: 0.1.0 returns HTTP 400 for `stop` and
+  `user`, among others; 0.2.0 accepts `stop`, penalties, `n` and `logprobs`
+  but does not apply them. The demo only sends `model`, `messages`, `max_tokens`
   and `temperature`.
 - `POST /v1/chat/completions`, `GET /v1/models`.
 - Stage scripts `loom-port-llm/port.sh`, `qualify.sh`, `finalize.sh`; nine
@@ -144,9 +146,13 @@ Confirmed against the HRX Loom quickstart, the loom-dev site and the
   on the descriptor screen (device, `memory_bytes`, context) come from the
   loom-dev catalog and the cards' quick starts. Do not quote the rest of the
   schema from this demo.
-- **Version pinning.** loom-dev and the cards pin `hrx-loom[hf]==0.1.0`, and
-  `01_install_loom.sh` now does the same by default. Newer `hrx-system` builds
-  cannot serve 0.1.0 packages, so keep the pin until the cards move.
+- **Version pinning.** The loom-fun cards on `main` are 0.2.0 cards (promoted
+  2026-11-17), and `01_install_loom.sh` pins `hrx-loom[hf]==0.2.0` to match.
+  0.2.0 cannot serve 0.1.0 packages (`unknown model field 'pool_capacity'`),
+  and loom-fetch will not overwrite one (`conflicting installation document`),
+  so delete an old `loom-models/` directory after upgrading. To stay on 0.1.0:
+  `LOOM_VERSION=0.1.0 ./01_install_loom.sh` and
+  `REVISION=v0.1.0 ./02_fetch_and_serve.sh <pkg>`.
 
 ### Tested on real hardware
 
@@ -154,6 +160,8 @@ On 2026-11-13 the scripts and live mode were run on a Strix Halo
 (Ryzen AI Max+ PRO 395, Radeon 8060S, 128 GB) with hrx-loom 0.1.0 and
 `loom-fun/bartowski-Qwen2.5-0.5B-Instruct-loom`: install, fetch, serve,
 `03_measure.sh`, and `/api/probe` at concurrency 1, 4 and 8 with no failures.
+Re-run on 2026-11-19 with hrx-loom 0.2.0 (cards at `main`, preset `chat`) and
+with 0.1.0 (cards at `v0.1.0`): same steps, no failures.
 
 ### Two traps worth knowing about
 
