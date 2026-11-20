@@ -242,6 +242,8 @@ def api_probe():
 
     try:
         body = request.get_json(silent=True) or {}
+        if not isinstance(body, dict):
+            return jsonify({"error": "request body must be a JSON object"}), 400
         try:
             concurrency = int(body.get("concurrency", 4))
             prompt_tokens = max(1, min(int(body.get("prompt_tokens", 200)), 32768))
