@@ -243,6 +243,8 @@ select,input[type=number]{
 .board .sp{font-family:var(--mono);text-align:right;color:var(--good);font-weight:600}
 .board .sp.slow{color:var(--bad)}
 .board .ev a{font-family:var(--mono);font-size:11px}
+.board .cov{font-family:var(--mono);font-size:10.5px;color:var(--warn);
+  border:1px solid var(--line-2);border-radius:3px;padding:0 4px;margin-left:4px}
 .board .rg{font-size:11px;color:var(--warn);font-family:var(--mono);text-align:right}
 
 /* ---------- live ---------- */
@@ -361,14 +363,15 @@ footer{
           <div class="tgt"><b>Wasm</b><span>modules</span></div>
         </div>
       </div>
-      <p class="pipe-note">The same Qwen27B source runs through two of these paths unchanged —
-        native AMD GPU instructions, or SPIR-V handed to a Vulkan driver.</p>
+      <p class="pipe-note">Per the <a href="https://rocm.github.io/hrx-system/loom/" target="_blank" rel="noopener">hrx-system docs</a>,
+        the same source files for a Qwen 27B model (version not named there) run through two of these
+        paths unchanged — native AMD GPU instructions, or SPIR-V handed to a Vulkan driver.</p>
     </div>
 
     <div class="panel">
       <div class="panel-head"><span>serve descriptor</span><span class="faint" id="descModelName">—</span></div>
-      <p class="panel-lede">The fields below are the real <code>serve</code> block published for this
-         model in the loom-fun catalog. They are what you actually tune per box.</p>
+      <p class="panel-lede">The fields below are the serve settings published for this model in the
+         loom-fun catalog. They are what you actually tune per box.</p>
       <table class="kv" id="descTable"></table>
       <div class="desc-pick">
         <label>inspect another model package
@@ -453,7 +456,7 @@ footer{
       <div class="panel-head"><span>the roofline step is the honest one</span></div>
       <p class="panel-lede">Before optimizing, the agent estimates the performance limit and tells
         you if your target is out of reach. That is what stops the loop from burning a
-        3-hour budget chasing a number the memory system cannot deliver.</p>
+        long budget (say, the 3 hours in the last example below) chasing a number the memory system cannot deliver.</p>
       <div class="quote">
         <code>&gt; /loom Port, validate and optimize &lt;hf-gguf&gt;.</code>
         <code>&gt; /loom … until decode is 50% faster than llama.cpp.</code>
@@ -489,7 +492,7 @@ footer{
 
   <div class="grid-2">
     <div class="panel">
-      <div class="panel-head"><span>leaderboard</span><span class="faint">geometric mean across 9 workloads</span></div>
+      <div class="panel-head"><span>leaderboard</span><span class="faint">geometric mean across 9 workloads · ranked only with full coverage</span></div>
       <div class="board-wrap"><table class="board" id="board"></table></div>
     </div>
 
@@ -517,8 +520,10 @@ footer{
 <section class="screen" id="screen-unlock">
   <div class="screen-head">
     <h2>The bottleneck that moved.</h2>
-    <p>Fifty models across eighteen architectures, in three to four days. The number worth
-       arguing about internally is not the speedup — it is the elapsed time, and what it
+    <p>Fifty models across eighteen architectures in three to four days, as
+       <a href="https://www.phoronix.com/news/AMD-HRX-Loom-Experiment" target="_blank" rel="noopener">reported by Phoronix</a>
+       (the published catalog has since grown to 51). That timeline is the project's account, not
+       something this demo measured. The number worth arguing about internally is not the speedup — it is the elapsed time, and what it
        implies about who is allowed to add a model.</p>
   </div>
 
@@ -537,7 +542,7 @@ footer{
       <div class="panel-head"><span>with Loom</span></div>
       <ul class="cmp cmp-after">
         <li>New architecture → author a model package</li>
-        <li>Load, edit or swap it without restarting the server</li>
+        <li>Register, unregister or swap it over HTTP without restarting the server</li>
         <li>Anyone with the SDK and a GPU can port and publish</li>
         <li>A port is shareable source, not a vendor patch</li>
         <li>A better decoder or quantization carries to the next port</li>
@@ -558,6 +563,9 @@ footer{
     <ul class="gaps">
       <li><b>No local measurement unless you connect one.</b> In replay mode every figure is
         published loom-fun data from 2026-11-13, not a reading from the machine in front of you.</li>
+      <li><b>The catalog snapshot predates hrx-loom 0.2.0.</b> The 2026-11-13 data was captured
+        before the loom-fun cards were promoted to 0.2.0 (2026-11-16/17); current cards may show
+        different figures.</li>
       <li><b>No power, thermal or memory-pressure data.</b> The catalog does not publish it, and
         on a 128 GB Strix Halo part that is a real question this demo cannot answer.</li>
       <li><b>No cold-start or compile-time figures.</b> "Kernels compile in microseconds to
@@ -627,6 +635,18 @@ const gb = (bytes) =>
 
 const num = (v) =>
   (v === null || v === undefined) ? "—" : v.toLocaleString();
+
+/* Workloads with a published speedup. A geomean over fewer than all of them
+   is not comparable with a full one, so partial rows are listed but not ranked. */
+const coverage = (m) =>
+  CATALOG.workloads.filter((w) => m.metrics[w].speedup !== null && m.metrics[w].speedup !== undefined).length;
+const isFull = (m) => m.geomean_speedup !== null && coverage(m) === CATALOG.workloads.length;
+
+/* Same rule as Python's statistics.median, so chart and tiles agree. */
+function median(sorted) {
+  const n = sorted.length, h = Math.floor(n / 2);
+  return n % 2 ? sorted[h] : (sorted[h - 1] + sorted[h]) / 2;
+}
 
 /* ---------------- tabs ---------------- */
 $$(".tab").forEach((t) => {
@@ -746,14 +766,16 @@ function renderSkills() {
 function renderStats() {
   const dec = CATALOG.spread.decode;
   const p32 = CATALOG.spread.prefill_32k;
-  const withGeo = CATALOG.models.filter((m) => m.geomean_speedup !== null);
+  const full = CATALOG.models.filter(isFull);
+  const partial = CATALOG.models.length - full.length;
+  const nW = CATALOG.workloads.length;
   const anySlow = CATALOG.models.filter((m) => m.regressions.length > 0).length;
 
   const stats = [
     [CATALOG.model_count, "models ported<br>18 architectures"],
-    ["3–4", "days elapsed<br>for the whole experiment"],
-    [p32 ? p32.median + "×" : "—", "median prefill @32k<br>vs llama.cpp ROCm"],
-    [dec ? dec.median + "×" : "—", "median decode<br>vs llama.cpp ROCm"],
+    ["3–4", "days for the first 50 ports<br><a href=\"https://www.phoronix.com/news/AMD-HRX-Loom-Experiment\" target=\"_blank\" rel=\"noopener\">as reported</a>, not measured here"],
+    [p32 ? fmt(p32.median, 2, "×") : "—", "median prefill @32k<br>vs llama.cpp ROCm"],
+    [dec ? fmt(dec.median, 2, "×") : "—", "median decode<br>vs llama.cpp ROCm"],
     [anySlow, "ports with ≥1 workload<br>still slower than llama.cpp"],
   ];
   $("#statRow").innerHTML = stats
@@ -762,8 +784,10 @@ function renderStats() {
 
   $("#evidenceLede").innerHTML =
     `Published results from the loom-fun catalog (${CATALOG.generated}), measured on Strix Halo ` +
-    `against llama.cpp ROCm. ${withGeo.length} of ${CATALOG.model_count} ports have a full ` +
-    `geometric mean. Speedups above 1.0 favour Loom; below 1.0 llama.cpp is still faster — ` +
+    `against llama.cpp ROCm. ${full.length} of ${CATALOG.model_count} ports have results for all ` +
+    `${nW} workloads` +
+    (partial ? `; the other ${partial} ${partial === 1 ? "is" : "are"} listed unranked with their coverage` : "") +
+    `. Speedups above 1.0 favour Loom; below 1.0 llama.cpp is still faster — ` +
     `<b>both directions are shown</b>, because a benchmark page with no losses is not evidence.`;
 }
 
@@ -811,8 +835,8 @@ function drawStrip() {
 
     if (vals.length) {
       vals.sort((a, b) => a - b);
-      const med = vals[Math.floor(vals.length / 2)];
-      svg += `<line class="med-tick" x1="${x(med).toFixed(1)}" y1="${y - 13}" x2="${x(med).toFixed(1)}" y2="${y + 13}"><title>median ${med}×</title></line>`;
+      const med = median(vals);
+      svg += `<line class="med-tick" x1="${x(med).toFixed(1)}" y1="${y - 13}" x2="${x(med).toFixed(1)}" y2="${y + 13}"><title>median ${fmt(med, 2, "×")} (n=${vals.length})</title></line>`;
     }
   });
 
@@ -828,22 +852,29 @@ window.addEventListener("resize", () => {
 function renderBoard() {
   const head = `<tr><th class="rk">#</th><th>model</th><th style="text-align:right">geomean</th>` +
                `<th style="text-align:right">p32k</th><th style="text-align:right">decode</th>` +
-               `<th style="text-align:right">regr</th><th>evidence</th></tr>`;
+               `<th style="text-align:right" title="workloads where llama.cpp ROCm is still faster">slower</th>` +
+               `<th>evidence</th></tr>`;
 
-  const rows = CATALOG.models.map((m, i) => {
-    const geo = m.geomean_speedup;
+  // Full-coverage rows keep the catalog's order and get a rank; partial rows follow, unranked.
+  const ordered = CATALOG.models.filter(isFull).concat(CATALOG.models.filter((m) => !isFull(m)));
+  let rank = 0;
+  const nW = CATALOG.workloads.length;
+  const rows = ordered.map((m) => {
+    const full = isFull(m);
+    const cov = coverage(m);
+    const geo = full ? m.geomean_speedup : null;
     const p32 = m.metrics.prefill_32k.speedup;
     const dec = m.metrics.decode.speedup;
     const ev = m.evidence.url
       ? `<a href="${m.evidence.url}" target="_blank" rel="noopener">run ↗</a>`
       : "—";
     return `<tr>
-      <td class="rk">${i + 1}</td>
-      <td class="nm">${m.name}</td>
+      <td class="rk">${full ? ++rank : "—"}</td>
+      <td class="nm">${m.name}${full ? "" : ` <span class="cov" title="results for ${cov} of ${nW} workloads; not ranked">${cov}/${nW}</span>`}</td>
       <td class="sp${geo !== null && geo < 1 ? " slow" : ""}">${fmt(geo, 2, "×")}</td>
       <td class="sp${p32 !== null && p32 < 1 ? " slow" : ""}">${fmt(p32, 2, "×")}</td>
       <td class="sp${dec !== null && dec < 1 ? " slow" : ""}">${fmt(dec, 2, "×")}</td>
-      <td class="rg">${m.regressions.length || ""}</td>
+      <td class="rg" title="${m.regressions.join(", ")}">${m.regressions.length || ""}</td>
       <td class="ev">${ev}</td>
     </tr>`;
   }).join("");
@@ -865,10 +896,16 @@ function renderGates() {
     });
   });
 
+  // Bars are scaled to the whole catalog: a gate recorded for 2 models must not
+  // look like a full pass. Gates with no pass/fail/unknown anywhere are omitted.
+  const N = CATALOG.model_count;
+  const ran = (c) => c.pass + c.unknown + (c.fail || 0);
+  const omitted = names.filter((g) => ran(counts[g]) === 0).map((g) => CATALOG.gate_labels[g]);
   $("#gateGrid").innerHTML = names
-    .filter((g) => counts[g].total > 0)
+    .filter((g) => ran(counts[g]) > 0)
     .map((g) => {
-      const c = counts[g], t = c.total;
+      const c = counts[g], t = N;
+      const notRun = Math.max(0, N - c.total);
       const pc = (n) => ((n / t) * 100).toFixed(1) + "%";
       return `<div class="gate">
         <div class="gate-nm">${CATALOG.gate_labels[g]}</div>
@@ -877,7 +914,7 @@ function renderGates() {
           <i class="g-unk"  style="width:${pc(c.unknown + (c.fail || 0))}"></i>
           <i class="g-na"   style="width:${pc(c["n/a"])}"></i>
         </div>
-        <div class="gate-ct">${c.pass} pass · ${c["n/a"]} n/a${c.unknown ? ` · ${c.unknown} unknown` : ""}${c.fail ? ` · ${c.fail} fail` : ""}</div>
+        <div class="gate-ct">${c.pass} pass${c["n/a"] ? ` · ${c["n/a"]} n/a` : ""}${c.unknown ? ` · ${c.unknown} unknown` : ""}${c.fail ? ` · ${c.fail} fail` : ""}${notRun ? ` · ${notRun} not run` : ""}</div>
       </div>`;
     }).join("");
 
@@ -889,7 +926,8 @@ function renderGates() {
     `${t.unknown || 0} unknown, <b>${t.fail || 0} fail</b>. ` +
     `"Not applicable" dominates where a model has no vision, no drafter or no thinking mode — ` +
     `it is not a silent failure, but it is also not evidence of correctness for a feature the ` +
-    `model does not have.`;
+    `model does not have. Bars are out of all ${N} models; "not run" means no result was published.` +
+    (omitted.length ? ` Omitted (no model has a pass, fail or unknown result): ${omitted.join(", ")}.` : "");
 }
 
 /* ---------------- live probe ---------------- */

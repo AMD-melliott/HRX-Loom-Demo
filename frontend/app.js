@@ -34,6 +34,18 @@ const gb = (bytes) =>
 const num = (v) =>
   (v === null || v === undefined) ? "—" : v.toLocaleString();
 
+/* Workloads with a published speedup. A geomean over fewer than all of them
+   is not comparable with a full one, so partial rows are listed but not ranked. */
+const coverage = (m) =>
+  CATALOG.workloads.filter((w) => m.metrics[w].speedup !== null && m.metrics[w].speedup !== undefined).length;
+const isFull = (m) => m.geomean_speedup !== null && coverage(m) === CATALOG.workloads.length;
+
+/* Same rule as Python's statistics.median, so chart and tiles agree. */
+function median(sorted) {
+  const n = sorted.length, h = Math.floor(n / 2);
+  return n % 2 ? sorted[h] : (sorted[h - 1] + sorted[h]) / 2;
+}
+
 /* ---------------- tabs ---------------- */
 $$(".tab").forEach((t) => {
   t.addEventListener("click", () => {
@@ -152,14 +164,16 @@ function renderSkills() {
 function renderStats() {
   const dec = CATALOG.spread.decode;
   const p32 = CATALOG.spread.prefill_32k;
-  const withGeo = CATALOG.models.filter((m) => m.geomean_speedup !== null);
+  const full = CATALOG.models.filter(isFull);
+  const partial = CATALOG.models.length - full.length;
+  const nW = CATALOG.workloads.length;
   const anySlow = CATALOG.models.filter((m) => m.regressions.length > 0).length;
 
   const stats = [
     [CATALOG.model_count, "models ported<br>18 architectures"],
-    ["3–4", "days elapsed<br>for the whole experiment"],
-    [p32 ? p32.median + "×" : "—", "median prefill @32k<br>vs llama.cpp ROCm"],
-    [dec ? dec.median + "×" : "—", "median decode<br>vs llama.cpp ROCm"],
+    ["3–4", "days for the first 50 ports<br><a href=\"https://www.phoronix.com/news/AMD-HRX-Loom-Experiment\" target=\"_blank\" rel=\"noopener\">as reported</a>, not measured here"],
+    [p32 ? fmt(p32.median, 2, "×") : "—", "median prefill @32k<br>vs llama.cpp ROCm"],
+    [dec ? fmt(dec.median, 2, "×") : "—", "median decode<br>vs llama.cpp ROCm"],
     [anySlow, "ports with ≥1 workload<br>still slower than llama.cpp"],
   ];
   $("#statRow").innerHTML = stats
@@ -168,8 +182,10 @@ function renderStats() {
 
   $("#evidenceLede").innerHTML =
     `Published results from the loom-fun catalog (${CATALOG.generated}), measured on Strix Halo ` +
-    `against llama.cpp ROCm. ${withGeo.length} of ${CATALOG.model_count} ports have a full ` +
-    `geometric mean. Speedups above 1.0 favour Loom; below 1.0 llama.cpp is still faster — ` +
+    `against llama.cpp ROCm. ${full.length} of ${CATALOG.model_count} ports have results for all ` +
+    `${nW} workloads` +
+    (partial ? `; the other ${partial} ${partial === 1 ? "is" : "are"} listed unranked with their coverage` : "") +
+    `. Speedups above 1.0 favour Loom; below 1.0 llama.cpp is still faster — ` +
     `<b>both directions are shown</b>, because a benchmark page with no losses is not evidence.`;
 }
 
@@ -217,8 +233,8 @@ function drawStrip() {
 
     if (vals.length) {
       vals.sort((a, b) => a - b);
-      const med = vals[Math.floor(vals.length / 2)];
-      svg += `<line class="med-tick" x1="${x(med).toFixed(1)}" y1="${y - 13}" x2="${x(med).toFixed(1)}" y2="${y + 13}"><title>median ${med}×</title></line>`;
+      const med = median(vals);
+      svg += `<line class="med-tick" x1="${x(med).toFixed(1)}" y1="${y - 13}" x2="${x(med).toFixed(1)}" y2="${y + 13}"><title>median ${fmt(med, 2, "×")} (n=${vals.length})</title></line>`;
     }
   });
 
@@ -234,22 +250,29 @@ window.addEventListener("resize", () => {
 function renderBoard() {
   const head = `<tr><th class="rk">#</th><th>model</th><th style="text-align:right">geomean</th>` +
                `<th style="text-align:right">p32k</th><th style="text-align:right">decode</th>` +
-               `<th style="text-align:right">regr</th><th>evidence</th></tr>`;
+               `<th style="text-align:right" title="workloads where llama.cpp ROCm is still faster">slower</th>` +
+               `<th>evidence</th></tr>`;
 
-  const rows = CATALOG.models.map((m, i) => {
-    const geo = m.geomean_speedup;
+  // Full-coverage rows keep the catalog's order and get a rank; partial rows follow, unranked.
+  const ordered = CATALOG.models.filter(isFull).concat(CATALOG.models.filter((m) => !isFull(m)));
+  let rank = 0;
+  const nW = CATALOG.workloads.length;
+  const rows = ordered.map((m) => {
+    const full = isFull(m);
+    const cov = coverage(m);
+    const geo = full ? m.geomean_speedup : null;
     const p32 = m.metrics.prefill_32k.speedup;
     const dec = m.metrics.decode.speedup;
     const ev = m.evidence.url
       ? `<a href="${m.evidence.url}" target="_blank" rel="noopener">run ↗</a>`
       : "—";
     return `<tr>
-      <td class="rk">${i + 1}</td>
-      <td class="nm">${m.name}</td>
+      <td class="rk">${full ? ++rank : "—"}</td>
+      <td class="nm">${m.name}${full ? "" : ` <span class="cov" title="results for ${cov} of ${nW} workloads; not ranked">${cov}/${nW}</span>`}</td>
       <td class="sp${geo !== null && geo < 1 ? " slow" : ""}">${fmt(geo, 2, "×")}</td>
       <td class="sp${p32 !== null && p32 < 1 ? " slow" : ""}">${fmt(p32, 2, "×")}</td>
       <td class="sp${dec !== null && dec < 1 ? " slow" : ""}">${fmt(dec, 2, "×")}</td>
-      <td class="rg">${m.regressions.length || ""}</td>
+      <td class="rg" title="${m.regressions.join(", ")}">${m.regressions.length || ""}</td>
       <td class="ev">${ev}</td>
     </tr>`;
   }).join("");
@@ -271,10 +294,16 @@ function renderGates() {
     });
   });
 
+  // Bars are scaled to the whole catalog: a gate recorded for 2 models must not
+  // look like a full pass. Gates with no pass/fail/unknown anywhere are omitted.
+  const N = CATALOG.model_count;
+  const ran = (c) => c.pass + c.unknown + (c.fail || 0);
+  const omitted = names.filter((g) => ran(counts[g]) === 0).map((g) => CATALOG.gate_labels[g]);
   $("#gateGrid").innerHTML = names
-    .filter((g) => counts[g].total > 0)
+    .filter((g) => ran(counts[g]) > 0)
     .map((g) => {
-      const c = counts[g], t = c.total;
+      const c = counts[g], t = N;
+      const notRun = Math.max(0, N - c.total);
       const pc = (n) => ((n / t) * 100).toFixed(1) + "%";
       return `<div class="gate">
         <div class="gate-nm">${CATALOG.gate_labels[g]}</div>
@@ -283,7 +312,7 @@ function renderGates() {
           <i class="g-unk"  style="width:${pc(c.unknown + (c.fail || 0))}"></i>
           <i class="g-na"   style="width:${pc(c["n/a"])}"></i>
         </div>
-        <div class="gate-ct">${c.pass} pass · ${c["n/a"]} n/a${c.unknown ? ` · ${c.unknown} unknown` : ""}${c.fail ? ` · ${c.fail} fail` : ""}</div>
+        <div class="gate-ct">${c.pass} pass${c["n/a"] ? ` · ${c["n/a"]} n/a` : ""}${c.unknown ? ` · ${c.unknown} unknown` : ""}${c.fail ? ` · ${c.fail} fail` : ""}${notRun ? ` · ${notRun} not run` : ""}</div>
       </div>`;
     }).join("");
 
@@ -295,7 +324,8 @@ function renderGates() {
     `${t.unknown || 0} unknown, <b>${t.fail || 0} fail</b>. ` +
     `"Not applicable" dominates where a model has no vision, no drafter or no thinking mode — ` +
     `it is not a silent failure, but it is also not evidence of correctness for a feature the ` +
-    `model does not have.`;
+    `model does not have. Bars are out of all ${N} models; "not run" means no result was published.` +
+    (omitted.length ? ` Omitted (no model has a pass, fail or unknown result): ${omitted.join(", ")}.` : "");
 }
 
 /* ---------------- live probe ---------------- */

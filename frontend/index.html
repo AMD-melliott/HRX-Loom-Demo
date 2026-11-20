@@ -66,14 +66,15 @@
           <div class="tgt"><b>Wasm</b><span>modules</span></div>
         </div>
       </div>
-      <p class="pipe-note">The same Qwen27B source runs through two of these paths unchanged —
-        native AMD GPU instructions, or SPIR-V handed to a Vulkan driver.</p>
+      <p class="pipe-note">Per the <a href="https://rocm.github.io/hrx-system/loom/" target="_blank" rel="noopener">hrx-system docs</a>,
+        the same source files for a Qwen 27B model (version not named there) run through two of these
+        paths unchanged — native AMD GPU instructions, or SPIR-V handed to a Vulkan driver.</p>
     </div>
 
     <div class="panel">
       <div class="panel-head"><span>serve descriptor</span><span class="faint" id="descModelName">—</span></div>
-      <p class="panel-lede">The fields below are the real <code>serve</code> block published for this
-         model in the loom-fun catalog. They are what you actually tune per box.</p>
+      <p class="panel-lede">The fields below are the serve settings published for this model in the
+         loom-fun catalog. They are what you actually tune per box.</p>
       <table class="kv" id="descTable"></table>
       <div class="desc-pick">
         <label>inspect another model package
@@ -158,7 +159,7 @@
       <div class="panel-head"><span>the roofline step is the honest one</span></div>
       <p class="panel-lede">Before optimizing, the agent estimates the performance limit and tells
         you if your target is out of reach. That is what stops the loop from burning a
-        3-hour budget chasing a number the memory system cannot deliver.</p>
+        long budget (say, the 3 hours in the last example below) chasing a number the memory system cannot deliver.</p>
       <div class="quote">
         <code>&gt; /loom Port, validate and optimize &lt;hf-gguf&gt;.</code>
         <code>&gt; /loom … until decode is 50% faster than llama.cpp.</code>
@@ -194,7 +195,7 @@
 
   <div class="grid-2">
     <div class="panel">
-      <div class="panel-head"><span>leaderboard</span><span class="faint">geometric mean across 9 workloads</span></div>
+      <div class="panel-head"><span>leaderboard</span><span class="faint">geometric mean across 9 workloads · ranked only with full coverage</span></div>
       <div class="board-wrap"><table class="board" id="board"></table></div>
     </div>
 
@@ -222,8 +223,10 @@
 <section class="screen" id="screen-unlock">
   <div class="screen-head">
     <h2>The bottleneck that moved.</h2>
-    <p>Fifty models across eighteen architectures, in three to four days. The number worth
-       arguing about internally is not the speedup — it is the elapsed time, and what it
+    <p>Fifty models across eighteen architectures in three to four days, as
+       <a href="https://www.phoronix.com/news/AMD-HRX-Loom-Experiment" target="_blank" rel="noopener">reported by Phoronix</a>
+       (the published catalog has since grown to 51). That timeline is the project's account, not
+       something this demo measured. The number worth arguing about internally is not the speedup — it is the elapsed time, and what it
        implies about who is allowed to add a model.</p>
   </div>
 
@@ -242,7 +245,7 @@
       <div class="panel-head"><span>with Loom</span></div>
       <ul class="cmp cmp-after">
         <li>New architecture → author a model package</li>
-        <li>Load, edit or swap it without restarting the server</li>
+        <li>Register, unregister or swap it over HTTP without restarting the server</li>
         <li>Anyone with the SDK and a GPU can port and publish</li>
         <li>A port is shareable source, not a vendor patch</li>
         <li>A better decoder or quantization carries to the next port</li>
@@ -263,6 +266,9 @@
     <ul class="gaps">
       <li><b>No local measurement unless you connect one.</b> In replay mode every figure is
         published loom-fun data from 2026-11-13, not a reading from the machine in front of you.</li>
+      <li><b>The catalog snapshot predates hrx-loom 0.2.0.</b> The 2026-11-13 data was captured
+        before the loom-fun cards were promoted to 0.2.0 (2026-11-16/17); current cards may show
+        different figures.</li>
       <li><b>No power, thermal or memory-pressure data.</b> The catalog does not publish it, and
         on a 128 GB Strix Halo part that is a real question this demo cannot answer.</li>
       <li><b>No cold-start or compile-time figures.</b> "Kernels compile in microseconds to
