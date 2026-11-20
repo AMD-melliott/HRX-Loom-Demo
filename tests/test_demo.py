@@ -11,6 +11,7 @@ Run from the project root:
 """
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -22,8 +23,9 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-DEMO_PORT = 5099
-STUB_PORT = 8099
+# Overridable for shared machines where these ports are taken.
+DEMO_PORT = int(os.environ.get("DEMO_TEST_PORT", "5099"))
+STUB_PORT = int(os.environ.get("DEMO_TEST_STUB_PORT", "8099"))
 
 
 def http_json(url, payload=None, timeout=30):
@@ -244,6 +246,13 @@ class TestServerModes(unittest.TestCase):
             http_json(f"http://127.0.0.1:{DEMO_PORT}/api/probe",
                       {"concurrency": "lots"})
         self.assertEqual(cm.exception.code, 400)
+
+    def test_09_non_object_probe_body_is_a_400(self):
+        """A JSON array or string body is the caller's error too, not a 500."""
+        for body in ([1], "x"):
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                http_json(f"http://127.0.0.1:{DEMO_PORT}/api/probe", body)
+            self.assertEqual(cm.exception.code, 400, body)
 
 
 if __name__ == "__main__":
