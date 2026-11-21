@@ -61,7 +61,7 @@ unlocks. Published catalog numbers stay on screen but stay labelled published.
 
 | # | Screen | The point |
 |---|---|---|
-| 01 | **The stack** | A port is a *model package*, not an engine patch. Shows the compile path (one source → ELF / HSACO / SPIR-V / Wasm / NPU) and the real `serve` descriptor for any of the 51 published ports. |
+| 01 | **The stack** | A port is a *model package*, not an engine patch. Shows the compile path (one source → ELF / HSACO / SPIR-V / Wasm / NPU) and the published serve settings for any of the 51 ports. |
 | 02 | **The agent loop** | Port → Measure → Optimize → Report, with the real script names. The roofline step is what stops the agent burning a budget on an unreachable target, and the card generator refuses numbers without evidence. |
 | 03 | **Evidence** | The published benchmark data, wins *and* losses, each row linking to its GitHub Actions run. Live measurement panel when a server is attached. |
 | 04 | **What it unlocks** | The engine-maintainer bottleneck, the 13 validation gates across the catalog, and an explicit list of what this demo does not show. |
